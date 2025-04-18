@@ -9,6 +9,8 @@ import {IRebaseToken} from "../src/interfaces/IRebaseToken.sol";
 import {IERC20} from "@ccip/contracts/src/v0.8/vendor/openzeppelin-solidity/v4.8.3/contracts/token/ERC20/IERC20.sol";
 import {CCIPLocalSimulatorFork} from "@chainlink/local/src/ccip/CCIPLocalSimulatorFork.sol";
 import {RegistryModuleOwnerCustom} from "@ccip/contracts/src/v0.8/ccip/tokenAdminRegistry/RegistryModuleOwnerCustom.sol";
+import {TokenPool} from "@ccip/contracts/src/v0.8/ccip/pools/TokenPool.sol";
+import {RateLimiter} from "@ccip/contracts/src/v0.8/ccip/libraries/RateLimiter.sol";
 import {TokenAdminRegistry} from "@ccip/contracts/src/v0.8/ccip/tokenAdminRegistry/TokenAdminRegistry.sol";
 import {Register} from "@chainlink/local/src/ccip/Register.sol";
 
@@ -79,6 +81,43 @@ contract CrossChainTest is Test {
         TokenAdminRegistry(arbSepoliaNetworkDetails.tokenAdminRegistryAddress).setPool(
             address(sepoliaToken), address(sepoliaTokenPool)
         );
+        ConfigureTokenPool(
+            sepoliaFork,
+            address(sepoliaTokenPool),
+            arbSepoliaNetworkDetails.chainSelector,
+            address(arbSepoliaTokenPool),
+            address(arbSepoliaToken)
+        );
+        ConfigureTokenPool(
+            arbSepoliaFork,
+            address(arbSepoliaTokenPool),
+            sepoliaNetworkDetails.chainSelector,
+            address(sepoliaTokenPool),
+            address(sepoliaToken)
+        );
         vm.stopPrank();
+    }
+
+    function ConfigureTokenPool(
+        uint256 fork,
+        address localPool,
+        uint64 remoteChainSelector,
+        address remotePool,
+        address remoteTokenAddress
+    ) public {
+        vm.selectFork(fork);
+        vm.prank(owner);
+
+        TokenPool.ChainUpdate[] memory chainsToAdd = new TokenPool.ChainUpdate[](1);
+
+        chainsToAdd[0] = TokenPool.ChainUpdate({
+            remoteChainSelector: remoteChainSelector,
+            allowed: true,
+            remotePoolAddress: abi.encode(remotePool),
+            remoteTokenAddress: abi.encode(remoteTokenAddress),
+            outboundRateLimiterConfig: RateLimiter.Config({isEnabled: false, capacity: 0, rate: 0}),
+            inboundRateLimiterConfig: RateLimiter.Config({isEnabled: false, capacity: 0, rate: 0})
+        });
+        TokenPool(localPool).applyChainUpdates(chainsToAdd);
     }
 }
